@@ -1,0 +1,44 @@
+# Unity generated folders (temporary / derived data - never commit)
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Bb]uild[Ss]et/
+[Bb]uildStaging/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Unity Version Control (Plastic SCM) workspace metadata
+.plastic/
+
+# IDE / editor generated files
+.vs/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Unity crash reports
+sysinfo.txt
+crashlytics-build.properties
+
+# Unity version control integration in generated files
+Assets/AssetStoreTools*
+
+# NOTE: .meta files are NEVER ignored - they are required for Unity projects

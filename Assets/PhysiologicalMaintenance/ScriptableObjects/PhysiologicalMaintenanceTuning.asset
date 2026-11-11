@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 212367ca0eeb4c14bbd1b4660dcd4fa2, type: 3}
+  m_Name: PhysiologicalMaintenanceTuning
+  m_EditorClassIdentifier:
+  missionDurationMinutes: 10
+  simulationSecondsPerRealSecond: 6
+  exerciseObjectiveSeconds: 180
+  exerciseSessionObjective: 2
+  initialOxygenPercent: 62
+  initialPower: 52
+  initialWaste: 70
+  wasteCapacity: 100
+  initialTemperatureC: 22
+  muscleInactivityLossPerMinute: 0.035
+  boneInactivityLossPerMinute: 0.025
+  cardioInactivityLossPerMinute: 0.03
+  fatigueRecoveryPerMinute: 2.4
+  consistencyGainPerTrainingMinute: 0.32
+  consistencyLossPerIdleMinute: 0.08
+  fatigueEffectOnTraining: 0.65
+  idleOxygenUsePerMinute: 0.7
+  oxygenRegenerationPerMinute: 8
+  oxygenWarningPercent: 35
+  oxygenCriticalPercent: 10
+  passiveTemperatureDriftPerMinute: 0.12
+  coolingPerMinute: 2.4
+  coolingPowerPerMinute: 1.8
+  temperatureWarningLowC: 18
+  temperatureWarningHighC: 29
+  temperatureCriticalLowC: 14
+  temperatureCriticalHighC: 36
+  idleWastePerMinute: 0.12
+  wasteProcessingPerMinute: 2.2
+  wasteProcessorPowerPerMinute: 0.7
+  wasteWarningFraction: 0.8
+  habitatPowerPerMinute: 0.45
+  solarSupplyPerMinute: 0.65
+  oxygenRegulatorPowerPerMinute: 0.9
+  lowPowerWarning: 18
+  powerCritical: 3

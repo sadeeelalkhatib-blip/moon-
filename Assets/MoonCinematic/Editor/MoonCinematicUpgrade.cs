@@ -23,7 +23,7 @@ namespace MoonCinematic.EditorTools
     ///     solar wing, cockpit shell, fuel lines, skid gouges);
     ///  3. re-frames Camera_06 FinalWide so astronaut + wreck share the final
     ///     hold shot and re-bakes its drift clip;
-    ///  4. builds the cinematic END CARD ("THE LUNAR") and wires it into
+    ///  4. builds the cinematic END CARD ("MISSION FAILED") and wires it into
     ///     the CinematicSequenceController.
     /// </summary>
     public static class MoonCinematicUpgrade

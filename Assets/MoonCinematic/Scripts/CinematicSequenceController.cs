@@ -47,8 +47,8 @@ namespace MoonCinematic
         public float endCardFadeDuration = 1.6f;
         [Tooltip("Seconds the fully visible end card holds before everything is stopped.")]
         public float endCardHoldDuration = 6.5f;
-        public string endCardTitleText = "MISSION FAILED";
-        public string endCardSubText = "MOON EXPEDITION - LUNAR SURFACE";
+        public string endCardTitleText = "THE LUNAR";
+        public string endCardSubText = "WELCOME, ASTRONAUT. YOUR LUNAR JOURNEY BEGINS NOW.";
 
         float _lastTextAlpha = 0f;
         Camera[] _cinematicCams;
@@ -161,7 +161,7 @@ namespace MoonCinematic
             }
         }
 
-        /// <summary>Big cinematic end card ("MISSION FAILED") that fades in over the
+        /// <summary>Big cinematic end card ("THE LUNAR") that fades in over the
         /// black screen after the final shot, holds for several seconds so the viewer
         /// clearly understands the trailer is over, then everything stops cleanly.</summary>
         void UpdateEndCard(float t)

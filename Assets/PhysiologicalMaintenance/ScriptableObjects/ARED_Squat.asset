@@ -15,6 +15,9 @@ MonoBehaviour:
   exerciseId: ared-squat
   displayName: ARED Squat
   mode: 0
+  exerciseType: 0
+  targetRepetitions: 10
+  repetitionCycleSeconds: 9
   muscleAdaptationPerMinute: 0.24
   boneAdaptationPerMinute: 0.17
   cardiovascularAdaptationPerMinute: 0

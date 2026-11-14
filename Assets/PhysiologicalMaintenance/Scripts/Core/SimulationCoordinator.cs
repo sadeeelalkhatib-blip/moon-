@@ -1,13 +1,18 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PhysiologicalMaintenance
 {
     public sealed class SimulationSnapshot
     {
+        public MissionState MissionState;
+        public float MissionElapsedSeconds;
+        public ExerciseObjectiveSnapshot[] Objectives;
         public float MissionElapsedMinutes;
         public float MissionDurationMinutes;
         public int SessionsCompleted;
+        public int Score;
         public float ExerciseSeconds;
         public ExerciseSession Session;
         public float MuscleHealth;
@@ -37,9 +42,14 @@ namespace PhysiologicalMaintenance
         private readonly TemperatureSystem temperature;
         private readonly WasteManagementSystem waste;
         private readonly PowerSystem power;
+        private readonly Dictionary<string, int> repetitionProgress = new Dictionary<string, int>();
+        private ExerciseDefinition[] objectives = Array.Empty<ExerciseDefinition>();
         private float missionElapsedMinutes;
+        private float missionElapsedSeconds;
         private float exerciseSeconds;
         private int sessionsCompleted;
+        private int score;
+        private MissionState missionState = MissionState.NotStarted;
         private float totalPowerUsed;
         private bool missionEnded;
 
@@ -47,6 +57,7 @@ namespace PhysiologicalMaintenance
         public bool CoolingEnabled { get; set; }
         public bool WasteProcessorEnabled { get; set; }
         public bool MissionEnded => missionEnded;
+        public MissionState State => missionState;
         public event Action<MissionResult> MissionFinished;
 
         public SimulationCoordinator(SimulationTuning simulationTuning)
@@ -60,11 +71,39 @@ namespace PhysiologicalMaintenance
 
         public ExerciseSession Session => session;
 
+        public void ConfigureObjectives(ExerciseDefinition[] definitions)
+        {
+            objectives = definitions ?? Array.Empty<ExerciseDefinition>();
+            repetitionProgress.Clear();
+            for (int i = 0; i < objectives.Length; i++)
+                if (objectives[i] != null && objectives[i].TargetRepetitions > 0)
+                    repetitionProgress[objectives[i].ExerciseId] = 0;
+        }
+
+        public void StartMission()
+        {
+            if (!missionEnded && missionState == MissionState.NotStarted)
+                missionState = MissionState.InProgress;
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (missionEnded || missionState == MissionState.NotStarted)
+                return;
+            missionState = paused ? MissionState.Paused : MissionState.InProgress;
+        }
+
         public void Reset()
         {
             missionElapsedMinutes = 0f;
+            missionElapsedSeconds = 0f;
             exerciseSeconds = 0f;
             sessionsCompleted = 0;
+            score = 0;
+            missionState = MissionState.NotStarted;
+            for (int i = 0; i < objectives.Length; i++)
+                if (objectives[i] != null && objectives[i].TargetRepetitions > 0)
+                    repetitionProgress[objectives[i].ExerciseId] = 0;
             totalPowerUsed = 0f;
             missionEnded = false;
             physiology.Reset();
@@ -80,8 +119,19 @@ namespace PhysiologicalMaintenance
 
         public void StartExercise(ExerciseDefinition definition, float intensity, float targetSeconds)
         {
-            if (!missionEnded && definition != null && physiology.Fatigue < 96f)
-                session.Start(definition, intensity, targetSeconds);
+            if (missionEnded || definition == null || physiology.Fatigue >= 96f)
+                return;
+
+            StartMission();
+            int remainingRepetitions = definition.TargetRepetitions;
+            if (remainingRepetitions > 0)
+            {
+                int completed = GetCompletedRepetitions(definition);
+                remainingRepetitions = Mathf.Max(0, definition.TargetRepetitions - completed);
+                if (remainingRepetitions == 0)
+                    return;
+            }
+            session.Start(definition, intensity, targetSeconds, remainingRepetitions);
         }
 
         public void ToggleExercisePause() => session.TogglePause();
@@ -89,7 +139,7 @@ namespace PhysiologicalMaintenance
 
         public SimulationSnapshot Tick(float simulationSeconds)
         {
-            if (missionEnded || simulationSeconds <= 0f)
+            if (missionEnded || missionState != MissionState.InProgress || simulationSeconds <= 0f)
                 return GetSnapshot();
 
             float deltaMinutes = simulationSeconds / 60f;
@@ -113,8 +163,15 @@ namespace PhysiologicalMaintenance
 
             ExerciseSessionState previousSessionState = session.State;
             float previousSessionElapsed = session.ElapsedSeconds;
+            int previousRepetitions = session.RepetitionsCompleted;
             session.Advance(simulationSeconds, equipmentPowered);
             exerciseSeconds += Mathf.Max(0f, session.ElapsedSeconds - previousSessionElapsed);
+            if (exercise != null && exercise.TargetRepetitions > 0)
+            {
+                int completedThisTick = session.RepetitionsCompleted - previousRepetitions;
+                AddCompletedRepetitions(exercise, completedThisTick);
+                score += completedThisTick * 10;
+            }
             if (previousSessionState == ExerciseSessionState.Running && session.State == ExerciseSessionState.Completed)
                 sessionsCompleted++;
 
@@ -135,10 +192,16 @@ namespace PhysiologicalMaintenance
             power.Advance(deltaMinutes, demand, tuning.SolarSupplyPerMinute, powerFactor);
             totalPowerUsed += demand * powerFactor * deltaMinutes;
             missionElapsedMinutes = Mathf.Min(tuning.MissionDurationMinutes, missionElapsedMinutes + deltaMinutes);
+            float simulationRate = Mathf.Max(0.01f, tuning.SimulationSecondsPerRealSecond);
+            missionElapsedSeconds += simulationSeconds / simulationRate;
 
             if (HasCriticalLifeSupportCondition())
             {
                 Finish(MissionOutcome.LifeSupportCritical, "A life-support resource crossed its documented critical limit.");
+            }
+            else if (HasConfiguredRepetitionObjectives() && AreExerciseObjectivesMet())
+            {
+                Finish(MissionOutcome.Success, "All required exercise repetitions were completed while life support remained operational.");
             }
             else if (missionElapsedMinutes >= tuning.MissionDurationMinutes)
             {
@@ -156,9 +219,13 @@ namespace PhysiologicalMaintenance
         {
             return new SimulationSnapshot
             {
+                MissionState = missionState,
+                MissionElapsedSeconds = missionElapsedSeconds,
+                Objectives = BuildObjectiveSnapshots(),
                 MissionElapsedMinutes = missionElapsedMinutes,
                 MissionDurationMinutes = tuning.MissionDurationMinutes,
                 SessionsCompleted = sessionsCompleted,
+                Score = score,
                 ExerciseSeconds = exerciseSeconds,
                 Session = session,
                 MuscleHealth = physiology.MuscleHealth,
@@ -196,8 +263,65 @@ namespace PhysiologicalMaintenance
                 objectivesMet ? "Mission concluded with exercise objectives met." : "Mission ended before all exercise objectives were met.");
         }
 
-        private bool AreExerciseObjectivesMet() =>
-            sessionsCompleted >= tuning.ExerciseSessionObjective && exerciseSeconds >= tuning.ExerciseObjectiveSeconds;
+        private bool HasConfiguredRepetitionObjectives()
+        {
+            for (int i = 0; i < objectives.Length; i++)
+                if (objectives[i] != null && objectives[i].TargetRepetitions > 0)
+                    return true;
+            return false;
+        }
+
+        private bool AreExerciseObjectivesMet()
+        {
+            if (HasConfiguredRepetitionObjectives())
+            {
+                for (int i = 0; i < objectives.Length; i++)
+                {
+                    ExerciseDefinition objective = objectives[i];
+                    if (objective != null && objective.TargetRepetitions > 0 &&
+                        GetCompletedRepetitions(objective) < objective.TargetRepetitions)
+                        return false;
+                }
+                return true;
+            }
+            return sessionsCompleted >= tuning.ExerciseSessionObjective && exerciseSeconds >= tuning.ExerciseObjectiveSeconds;
+        }
+
+        private int GetCompletedRepetitions(ExerciseDefinition definition)
+        {
+            return definition != null && repetitionProgress.TryGetValue(definition.ExerciseId, out int completed)
+                ? completed : 0;
+        }
+
+        private void AddCompletedRepetitions(ExerciseDefinition definition, int repetitions)
+        {
+            if (definition == null || repetitions <= 0 || !repetitionProgress.ContainsKey(definition.ExerciseId))
+                return;
+            repetitionProgress[definition.ExerciseId] = Mathf.Min(definition.TargetRepetitions,
+                GetCompletedRepetitions(definition) + repetitions);
+        }
+
+        private ExerciseObjectiveSnapshot[] BuildObjectiveSnapshots()
+        {
+            var snapshots = new List<ExerciseObjectiveSnapshot>();
+            for (int i = 0; i < objectives.Length; i++)
+            {
+                ExerciseDefinition definition = objectives[i];
+                if (definition == null || definition.TargetRepetitions <= 0)
+                    continue;
+                int completed = GetCompletedRepetitions(definition);
+                snapshots.Add(new ExerciseObjectiveSnapshot
+                {
+                    ExerciseId = definition.ExerciseId,
+                    DisplayName = definition.DisplayName,
+                    Type = definition.Type,
+                    TargetRepetitions = definition.TargetRepetitions,
+                    CompletedRepetitions = completed,
+                    IsComplete = completed >= definition.TargetRepetitions
+                });
+            }
+            return snapshots.ToArray();
+        }
 
         private bool HasCriticalLifeSupportCondition() =>
             oxygen.Percent <= tuning.OxygenCriticalPercent ||
@@ -212,13 +336,18 @@ namespace PhysiologicalMaintenance
                 return;
 
             missionEnded = true;
+            missionState = outcome == MissionOutcome.Success ? MissionState.Completed : MissionState.Failed;
             session.Stop();
             MissionFinished?.Invoke(new MissionResult
             {
                 Outcome = outcome,
+                State = missionState,
+                Objectives = BuildObjectiveSnapshots(),
                 Assessment = assessment,
+                MissionElapsedSeconds = missionElapsedSeconds,
                 MissionElapsedMinutes = missionElapsedMinutes,
                 SessionsCompleted = sessionsCompleted,
+                Score = score,
                 ExerciseSeconds = exerciseSeconds,
                 MuscleHealth = physiology.MuscleHealth,
                 BoneHealth = physiology.BoneHealth,

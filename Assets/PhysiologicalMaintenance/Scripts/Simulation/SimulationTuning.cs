@@ -6,8 +6,8 @@ namespace PhysiologicalMaintenance
     public sealed class SimulationTuning : ScriptableObject
     {
         [Header("Mission")]
-        [SerializeField, Min(1f)] private float missionDurationMinutes = 10f;
-        [SerializeField, Min(0.1f)] private float simulationSecondsPerRealSecond = 6f;
+        [SerializeField, Min(1f)] private float missionDurationMinutes = 7f;
+        [SerializeField, Min(0.1f)] private float simulationSecondsPerRealSecond = 1f;
         [SerializeField, Min(0f)] private float exerciseObjectiveSeconds = 180f;
         [SerializeField, Min(1)] private int exerciseSessionObjective = 2;
 

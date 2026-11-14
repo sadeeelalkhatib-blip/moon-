@@ -18,10 +18,11 @@ namespace PhysiologicalMaintenance.Tests
             CheckPowerConsumptionAndInsufficientSupply();
             CheckPhysiologyAdaptationFatigueAndRecovery();
             CheckExerciseSessionStateAndReset();
+            CheckRepetitionObjectivesAndMissionLifecycle();
             CheckCoordinatedExerciseEffectsAndMissionSuccess();
             CheckCriticalLifeSupportFailure();
             CheckLevelSceneReferences();
-            Debug.Log("Physiological Maintenance verification passed: 9 simulation groups.");
+            Debug.Log("Physiological Maintenance verification passed: 10 verification groups.");
         }
 
         private static void CheckOxygenConsumptionAndRegulation()
@@ -104,7 +105,81 @@ namespace PhysiologicalMaintenance.Tests
             Require(session.State == ExerciseSessionState.Completed, "session should complete at target duration");
             session.Reset();
             Require(session.State == ExerciseSessionState.Idle && session.ElapsedSeconds == 0f, "session reset");
+
+            var repetitionDefinition = ExerciseDefinition.CreateRuntimeDefault("reps", "Repetition Test", ExerciseMode.Resistance,
+                0f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, ExerciseType.Squat, 2, 3f);
+            session.Start(repetitionDefinition, 0.7f, 60f, 2);
+            session.Advance(5.9f, true);
+            Require(session.RepetitionsCompleted == 1 && session.State == ExerciseSessionState.Running,
+                "only completed cycles should count");
+            session.TogglePause();
+            session.Advance(3f, true);
+            Require(session.RepetitionsCompleted == 1, "paused exercise must not award repetitions");
+            session.TogglePause();
+            session.Advance(0.1f, true);
+            Require(session.RepetitionsCompleted == 2 && session.State == ExerciseSessionState.Completed,
+                "second complete cycle should finish the target");
+            var durationLimitedDefinition = ExerciseDefinition.CreateRuntimeDefault("duration-limited", "Duration Limited",
+                ExerciseMode.Resistance, 0f, 0f, 0f, 1f, 1f, 1f, 1f, 1f, ExerciseType.Squat, 10, 4f);
+            session.Reset();
+            session.Start(durationLimitedDefinition, 0.7f, 30f, 10);
+            session.Advance(100f, true);
+            Require(session.ElapsedSeconds == 30f && session.RepetitionsCompleted == 7 &&
+                session.State == ExerciseSessionState.Completed,
+                "session duration should cap exercise time without awarding a partial repetition");
+            UnityEngine.Object.DestroyImmediate(durationLimitedDefinition);
+            UnityEngine.Object.DestroyImmediate(repetitionDefinition);
             UnityEngine.Object.DestroyImmediate(definition);
+        }
+
+        private static void CheckRepetitionObjectivesAndMissionLifecycle()
+        {
+            var tuning = ScriptableObject.CreateInstance<SimulationTuning>();
+            var squat = ExerciseDefinition.CreateRuntimeDefault("objective-squat", "Squats", ExerciseMode.Resistance,
+                0.24f, 0.17f, 0f, 6f, 4.8f, 3.2f, 1.1f, 3.5f, ExerciseType.Squat, 2, 2f);
+            var row = ExerciseDefinition.CreateRuntimeDefault("objective-row", "Rows", ExerciseMode.Resistance,
+                0.18f, 0.1f, 0.02f, 5f, 4.4f, 2.8f, 0.9f, 3.2f, ExerciseType.Row, 2, 2f);
+            var cycle = ExerciseDefinition.CreateRuntimeDefault("objective-cycle", "Cycling", ExerciseMode.CycleErgometer,
+                0.02f, 0.01f, 0.31f, 5.2f, 6.4f, 3.4f, 1.6f, 3.7f, ExerciseType.Cycling, 3, 1f);
+            var simulation = new SimulationCoordinator(tuning);
+            simulation.ConfigureObjectives(new[] { squat, row, cycle });
+            Require(simulation.State == MissionState.NotStarted, "mission should wait for exercise start");
+            simulation.StartExercise(squat, 0.65f, 120f);
+            Require(simulation.State == MissionState.InProgress, "first exercise starts mission timer");
+            simulation.Tick(3.9f);
+            Require(simulation.GetSnapshot().Objectives[0].CompletedRepetitions == 1, "first complete squat should count");
+            float elapsedBeforePause = simulation.GetSnapshot().MissionElapsedSeconds;
+            simulation.SetPaused(true);
+            simulation.Tick(4f);
+            Require(simulation.State == MissionState.Paused &&
+                simulation.GetSnapshot().MissionElapsedSeconds == elapsedBeforePause,
+                "paused mission must freeze its timer and simulation");
+            simulation.SetPaused(false);
+            simulation.StopExercise();
+            simulation.Tick(1f);
+            Require(simulation.GetSnapshot().Objectives[0].CompletedRepetitions == 1, "interruption must preserve only full repetitions");
+            simulation.StartExercise(squat, 0.65f, 120f);
+            simulation.Tick(2f);
+            Require(simulation.GetSnapshot().Objectives[0].IsComplete, "squat objective reaches configurable target");
+            simulation.StartExercise(row, 0.65f, 120f);
+            simulation.Tick(4f);
+            simulation.StartExercise(cycle, 0.65f, 120f);
+            simulation.Tick(3f);
+            SimulationSnapshot completed = simulation.GetSnapshot();
+            Require(simulation.State == MissionState.Completed && simulation.MissionEnded,
+                "all mandatory objectives complete mission");
+            Require(completed.MissionElapsedSeconds > 0f && completed.Objectives.Length == 3,
+                "timer and all objectives are retained at completion");
+            simulation.Reset();
+            SimulationSnapshot restarted = simulation.GetSnapshot();
+            Require(simulation.State == MissionState.NotStarted && restarted.MissionElapsedSeconds == 0f,
+                "restart resets mission state and elapsed time");
+            Require(restarted.Objectives[0].CompletedRepetitions == 0 && restarted.Objectives[1].CompletedRepetitions == 0 &&
+                restarted.Objectives[2].CompletedRepetitions == 0, "restart resets all repetition targets");
+            UnityEngine.Object.DestroyImmediate(squat);
+            UnityEngine.Object.DestroyImmediate(row);
+            UnityEngine.Object.DestroyImmediate(cycle);
+            UnityEngine.Object.DestroyImmediate(tuning);
         }
 
         private static void CheckCoordinatedExerciseEffectsAndMissionSuccess()
@@ -147,6 +222,7 @@ namespace PhysiologicalMaintenance.Tests
             var simulation = new SimulationCoordinator(tuning);
             MissionResult result = null;
             simulation.MissionFinished += missionResult => result = missionResult;
+            simulation.StartMission();
             simulation.Tick(1f);
             Require(simulation.MissionEnded, "critical oxygen should end the mission");
             Require(result != null && result.Outcome == MissionOutcome.LifeSupportCritical, "critical oxygen should produce failure result");
@@ -156,6 +232,7 @@ namespace PhysiologicalMaintenance.Tests
             simulation = new SimulationCoordinator(tuning);
             result = null;
             simulation.MissionFinished += missionResult => result = missionResult;
+            simulation.StartMission();
             simulation.Tick(1f);
             Require(simulation.MissionEnded, "critical electrical reserve should end the mission");
             Require(result != null && result.Outcome == MissionOutcome.LifeSupportCritical, "critical power should produce failure result");

@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 212367ca0eeb4c14bbd1b4660dcd4fa2, type: 3}
   m_Name: PhysiologicalMaintenanceTuning
   m_EditorClassIdentifier:
-  missionDurationMinutes: 10
-  simulationSecondsPerRealSecond: 6
+  missionDurationMinutes: 7
+  simulationSecondsPerRealSecond: 1
   exerciseObjectiveSeconds: 180
   exerciseSessionObjective: 2
   initialOxygenPercent: 62

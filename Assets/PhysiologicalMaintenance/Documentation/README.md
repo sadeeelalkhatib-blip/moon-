@@ -7,19 +7,19 @@ This level is a self-contained, educational gameplay approximation. It is not me
 1. Open `Assets/PhysiologicalMaintenance/Scenes/PhysiologicalMaintenance.unity` in Unity 6000.3.26f1.
 2. Enter Play Mode. The scene's level controller builds the habitat, equipment, runtime HUD, and local event system.
 3. Use the Operations Canvas or click either exercise station in the habitat to select it. UI panels are mouse/touch friendly.
-4. Press **START** to begin the selected exercise. Adjust intensity and target duration before starting. Use **PAUSE / RESUME** or **STOP** to manage the session.
-5. Manage oxygen regulation, thermal cooling, and waste processing with the three life-support controls. Pause the simulation separately with **PAUSE SIM**.
-6. The mission ends at the configured timer, on a critical life-support condition, or when **END MISSION** is selected. Restart and the mission summary are level-local.
+4. Select squat, row, or cycling (use **NEXT** to switch between squat and row), then press **START**. Adjust intensity and the maximum session duration before starting. Each exercise counts complete repetition cycles at its configured cadence; the duration limit stops a session without crediting a partial repetition. Use **PAUSE / RESUME** or **STOP** to manage a session.
+5. Complete every listed repetition objective. Manage oxygen regulation, thermal cooling, and waste processing with the three life-support controls. Pause the mission separately with **PAUSE SIM**.
+6. The mission succeeds when all repetition objectives are met, or ends early on a critical life-support condition. **END MISSION** records the current result; restart and the mission summary are level-local.
 
 The scene is intentionally not listed in `EditorBuildSettings.asset`; this avoids changing shared startup/build configuration. Opening the scene directly is the supported standalone workflow.
 
 ## Mission loop and assumptions
 
-The default mission lasts 10 simulated minutes at 6 simulated seconds per real second. The objectives are two completed exercise sessions and at least three simulated minutes of exercise. The player chooses resistance or cycle work, exercise intensity (25–100%), and 30–240 second session durations. Resistance definitions target muscle/bone metrics; cycle work targets cardiovascular fitness. Adaptations are gradual, scaled by intensity, fatigue, and training consistency. Inactivity gradually reduces metrics; idle time recovers fatigue.
+The life-support simulation is configured for 10 simulated minutes at 6 simulated seconds per real second. The mission clock shows elapsed real time; life-support rates and the mission time limit advance on simulated time. The default exercise objectives are 10 ARED squats, 10 ARED rows, and 30 cycle revolutions. Each ScriptableObject configures its objective count and seconds per repetition (9 seconds for a squat/row and 3 seconds for cycling). The player chooses the exercise, intensity (25–100%), and maximum session duration (30–240 seconds). Exercise sessions stop when the repetition target or maximum duration is reached; only full repetition cycles count, and progress carries across sessions. Resistance definitions target muscle/bone metrics; cycle work targets cardiovascular fitness. Adaptations are gradual, scaled by intensity, fatigue, and training consistency. Inactivity gradually reduces metrics; idle time recovers fatigue.
 
 Exercise draws oxygen and electrical power, adds heat, waste, and fatigue. Oxygen regulation increases reserves while drawing power; cooling lowers temperature while drawing power; waste processing frees storage while drawing power. Solar supply offsets a portion of the habitat load. If electrical delivery is insufficient, powered exercise is suspended and the enabled life-support rates are scaled by the available supply. A depleted resource does not silently recover.
 
-The ScriptableObject defaults in `ScriptableObjects/` configure session objectives, resource capacities/rates, warning/critical thresholds, and exercise-specific effects. Thresholds are gameplay warning bands rather than real-world safety limits:
+The ScriptableObject defaults in `ScriptableObjects/` configure repetition objectives, repetition cadence, resource capacities/rates, warning/critical thresholds, and exercise-specific effects. Thresholds are gameplay warning bands rather than real-world safety limits:
 
 - Oxygen warns at 35% and becomes critical at 10%, leaving a visible reserve-management interval.
 - Temperature warnings begin outside 18–29 °C; 14 °C and 36 °C are critical gameplay boundaries.
@@ -38,6 +38,8 @@ These values are intentionally exposed for tuning and should not be interpreted 
 - `UI/PhysiologicalMaintenanceUI` reads snapshots and results and sends player commands to the controller; it does not own duplicate resource/health values.
 - `Core/HabitatBuilder` creates level-local placeholder geometry and `Interaction/EquipmentStation` maps the exercise equipment to the selected exercise mode.
 
+The habitat and exercise equipment are procedural placeholders. No character model or motion-capture animation pack has been imported; the optional third-party assets require the user to complete their free checkout/download and provide the archives for inspection.
+
 ## Integration contract
 
 There was no shared level loader, mission manager, player-data interface, or completion contract in the inspected project. The level therefore introduces no global manager and changes no shared scene or project configuration.
@@ -46,4 +48,4 @@ A future caller can load the scene by path/name (`PhysiologicalMaintenance`) usi
 
 ## Verification
 
-`Tests/Editor/SimulationVerification.cs` is an Editor-only verification runner. Run **Tools > Physiological Maintenance > Run Simulation Checks** in the Editor. It checks system rates, power limitation, physiology/fatigue, exercise progression/pause/reset, coordinated effects, and critical failure. This runner should be executed in a disposable project copy when testing is automated, so generated Unity `Library/` data does not enter the shared working tree.
+`Tests/Editor/SimulationVerification.cs` is an Editor-only verification runner. Run **Tools > Physiological Maintenance > Run Simulation Checks** in the Editor. It checks system rates, power limitation, physiology/fatigue, timed and repetition-based exercise progression, mission pause/timer/reset, coordinated effects, scene references, and critical failure. This runner should be executed in a disposable project copy when testing is automated, so generated Unity `Library/` data does not enter the shared working tree.

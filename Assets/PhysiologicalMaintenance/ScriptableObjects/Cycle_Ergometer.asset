@@ -15,6 +15,9 @@ MonoBehaviour:
   exerciseId: cycle-steady
   displayName: Cycle Ergometer
   mode: 1
+  exerciseType: 2
+  targetRepetitions: 30
+  repetitionCycleSeconds: 3
   muscleAdaptationPerMinute: 0.02
   boneAdaptationPerMinute: 0.01
   cardiovascularAdaptationPerMinute: 0.31

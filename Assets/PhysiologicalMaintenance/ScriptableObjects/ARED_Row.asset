@@ -15,6 +15,9 @@ MonoBehaviour:
   exerciseId: ared-row
   displayName: ARED Row
   mode: 0
+  exerciseType: 1
+  targetRepetitions: 10
+  repetitionCycleSeconds: 9
   muscleAdaptationPerMinute: 0.18
   boneAdaptationPerMinute: 0.1
   cardiovascularAdaptationPerMinute: 0.02

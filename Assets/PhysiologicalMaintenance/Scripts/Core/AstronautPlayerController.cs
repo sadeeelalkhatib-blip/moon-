@@ -149,14 +149,22 @@ namespace PhysiologicalMaintenance
             {
                 float walkStrength = input.sqrMagnitude > 0.05f ? 1f : 0f;
                 float stride = Time.time * (walkStrength > 0f ? 9f : 0f);
-                if (leftLeg != null)
-                    leftLeg.localRotation = Quaternion.Euler(Mathf.Sin(stride) * 28f * walkStrength, 0f, 0f);
-                if (rightLeg != null)
-                    rightLeg.localRotation = Quaternion.Euler(-Mathf.Sin(stride) * 28f * walkStrength, 0f, 0f);
-                if (leftArm != null)
-                    leftArm.localRotation = Quaternion.Euler(-Mathf.Sin(stride) * 18f * walkStrength, 0f, 0f);
-                if (rightArm != null)
-                    rightArm.localRotation = Quaternion.Euler(Mathf.Sin(stride) * 18f * walkStrength, 0f, 0f);
+                if (usingImportedRig)
+                {
+                    if (leftLeg != null)
+                        leftLeg.localRotation = Quaternion.Euler(Mathf.Sin(stride) * 28f * walkStrength, 0f, 0f);
+                    if (rightLeg != null)
+                        rightLeg.localRotation = Quaternion.Euler(-Mathf.Sin(stride) * 28f * walkStrength, 0f, 0f);
+                    if (leftArm != null)
+                        leftArm.localRotation = Quaternion.Euler(-Mathf.Sin(stride) * 18f * walkStrength, 0f, 0f);
+                    if (rightArm != null)
+                        rightArm.localRotation = Quaternion.Euler(Mathf.Sin(stride) * 18f * walkStrength, 0f, 0f);
+                }
+                else
+                {
+                    modelRoot.localPosition = Vector3.up * (Mathf.Sin(stride * 2f) * 0.025f * walkStrength);
+                    modelRoot.localRotation = Quaternion.Euler(0f, 0f, -moveInput.x * 2f * walkStrength);
+                }
             }
         }
 
@@ -246,6 +254,8 @@ namespace PhysiologicalMaintenance
                 if (modelRoot != null)
                 {
                     modelRoot.localPosition = Vector3.Lerp(modelRoot.localPosition, Vector3.zero, deltaTime * 5f);
+                    modelRoot.localRotation = Quaternion.Slerp(modelRoot.localRotation, Quaternion.identity, deltaTime * 5f);
+                    modelRoot.localScale = Vector3.Lerp(modelRoot.localScale, Vector3.one, deltaTime * 5f);
                     if (head != null)
                         head.localRotation = Quaternion.Lerp(head.localRotation, Quaternion.identity, deltaTime * 9f);
                     if (torso != null)
@@ -270,6 +280,33 @@ namespace PhysiologicalMaintenance
             float squatWave = Mathf.Sin(exerciseCycle * Mathf.PI * 2f);
             float rowsWave = Mathf.Sin(exerciseCycle * Mathf.PI * 2f + Mathf.PI * 0.5f);
             float cycleWave = Mathf.Sin(exerciseCycle * Mathf.PI * 2f);
+
+            if (!usingImportedRig && modelRoot != null)
+            {
+                // The downloaded FBX is an unrigged static mesh. Keep its three exercise
+                // cycles visually distinct rather than applying a fake humanoid rig.
+                if (controller.SelectedExerciseType == ExerciseType.Squat)
+                {
+                    float squatDepth = (1f - squatWave) * 0.5f;
+                    float heightScale = 1f - squatDepth * 0.12f;
+                    modelRoot.localScale = new Vector3(1f, heightScale, 1f);
+                    modelRoot.localPosition = Vector3.zero;
+                    modelRoot.localRotation = Quaternion.identity;
+                }
+                else if (controller.SelectedExerciseType == ExerciseType.Row)
+                {
+                    modelRoot.localScale = Vector3.one;
+                    modelRoot.localPosition = Vector3.zero;
+                    modelRoot.localRotation = Quaternion.Euler(0f, 0f, rowsWave * 7f);
+                }
+                else
+                {
+                    modelRoot.localScale = Vector3.one;
+                    modelRoot.localPosition = Vector3.up * (0.02f + Mathf.Abs(cycleWave) * 0.025f);
+                    modelRoot.localRotation = Quaternion.Euler(4f + cycleWave * 2f, 0f, 0f);
+                }
+                return;
+            }
 
             if (controller.SelectedExerciseType == ExerciseType.Squat)
             {
@@ -408,7 +445,11 @@ namespace PhysiologicalMaintenance
             cameraPitch = 10f;
             exerciseCycle = 0f;
             if (modelRoot != null)
+            {
                 modelRoot.localPosition = Vector3.zero;
+                modelRoot.localRotation = Quaternion.identity;
+                modelRoot.localScale = Vector3.one;
+            }
             SetGameplayCursor(true);
         }
 
@@ -448,107 +489,32 @@ namespace PhysiologicalMaintenance
                 modelRoot = null;
             }
 
-            var importedCharacter = Resources.Load<GameObject>("PhysiologicalMaintenance/Characters/ManBaseCharacter");
-            if (importedCharacter != null)
+            var characterPrefab = Resources.Load<GameObject>("PhysiologicalMaintenance/Characters/ManBaseCharacter");
+            if (characterPrefab == null)
+                throw new System.InvalidOperationException(
+                    "Required downloaded player visual is missing from Resources/PhysiologicalMaintenance/Characters/ManBaseCharacter.prefab.");
+
+            GameObject instance = Instantiate(characterPrefab, transform);
+            instance.name = "Man Base Character (Downloaded FBX)";
+            modelRoot = instance.transform;
+            modelRoot.localPosition = Vector3.zero;
+            modelRoot.localRotation = Quaternion.identity;
+            modelRoot.localScale = Vector3.one;
+
+            avatarAnimator = instance.GetComponentInChildren<Animator>();
+            usingImportedRig = avatarAnimator != null && avatarAnimator.avatar != null &&
+                               avatarAnimator.avatar.isValid && avatarAnimator.avatar.isHuman;
+            if (usingImportedRig)
             {
-                GameObject instance = Instantiate(importedCharacter, transform);
-                instance.name = "Astronaut Model";
-                modelRoot = instance.transform;
-                modelRoot.localPosition = Vector3.zero;
-                modelRoot.localRotation = Quaternion.identity;
-                avatarAnimator = instance.GetComponentInChildren<Animator>();
-                usingImportedRig = avatarAnimator != null;
-
-                var renderers = instance.GetComponentsInChildren<Renderer>(true);
-                for (int i = 0; i < renderers.Length; i++)
-                {
-                    if (renderers[i].name.Contains("Body") || renderers[i].name.Contains("Torso") || renderers[i].name.Contains("Shirt") || renderers[i].name.Contains("Shorts") || renderers[i].name.Contains("Shoe") || renderers[i].name.Contains("Boot") || renderers[i].name.Contains("Belt"))
-                    {
-                        var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                        material.color = new Color(0.90f, 0.78f, 0.70f);
-                        renderers[i].sharedMaterial = material;
-                    }
-                }
-
-                var hips = instance.transform.Find("Root/Hips") ?? instance.transform.Find("Armature/Hips");
-                if (hips != null)
-                    torso = hips;
-                else
-                    torso = instance.transform;
-
-                head = FindChildByName(instance.transform, "Head") ?? FindChildByName(instance.transform, "head");
-                leftArm = FindChildByName(instance.transform, "LeftArm") ?? FindChildByName(instance.transform, "Left_Arm") ?? FindChildByName(instance.transform, "upper_arm.L");
-                rightArm = FindChildByName(instance.transform, "RightArm") ?? FindChildByName(instance.transform, "Right_Arm") ?? FindChildByName(instance.transform, "upper_arm.R");
-                leftLeg = FindChildByName(instance.transform, "LeftLeg") ?? FindChildByName(instance.transform, "Left_Leg") ?? FindChildByName(instance.transform, "thigh.L");
-                rightLeg = FindChildByName(instance.transform, "RightLeg") ?? FindChildByName(instance.transform, "Right_Leg") ?? FindChildByName(instance.transform, "thigh.R");
-                leftFoot = FindChildByName(instance.transform, "LeftFoot") ?? FindChildByName(instance.transform, "Left_Foot") ?? FindChildByName(instance.transform, "foot.L");
-                rightFoot = FindChildByName(instance.transform, "RightFoot") ?? FindChildByName(instance.transform, "Right_Foot") ?? FindChildByName(instance.transform, "foot.R");
-                return;
+                torso = avatarAnimator.GetBoneTransform(HumanBodyBones.Hips);
+                head = avatarAnimator.GetBoneTransform(HumanBodyBones.Head);
+                leftArm = avatarAnimator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+                rightArm = avatarAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm);
+                leftLeg = avatarAnimator.GetBoneTransform(HumanBodyBones.LeftUpperLeg);
+                rightLeg = avatarAnimator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+                leftFoot = avatarAnimator.GetBoneTransform(HumanBodyBones.LeftFoot);
+                rightFoot = avatarAnimator.GetBoneTransform(HumanBodyBones.RightFoot);
             }
-
-            var root = new GameObject("Astronaut Model");
-            root.transform.SetParent(transform, false);
-            root.transform.localPosition = Vector3.zero;
-            modelRoot = root.transform;
-
-            var bodyMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            bodyMaterial.color = new Color(0.90f, 0.78f, 0.70f);
-            var shirtMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            shirtMaterial.color = new Color(0.025f, 0.03f, 0.04f);
-            var shortsMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            shortsMaterial.color = new Color(0.08f, 0.09f, 0.11f);
-            var shoeMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            shoeMaterial.color = new Color(0.12f, 0.14f, 0.17f);
-
-            torso = CreatePrimitivePart(root.transform, PrimitiveType.Capsule, new Vector3(0f, 1.25f, 0f), new Vector3(0.6f, 0.8f, 0.34f), shirtMaterial, "Black Athletic Shirt");
-            head = CreatePrimitivePart(root.transform, PrimitiveType.Sphere, new Vector3(0f, 2.15f, 0f), Vector3.one * 0.28f, bodyMaterial, "Head");
-            var chest = CreatePrimitivePart(root.transform, PrimitiveType.Cube, new Vector3(0f, 1.2f, 0.22f), new Vector3(0.45f, 0.72f, 0.14f), shirtMaterial, "Shirt Front");
-            chest.localScale = new Vector3(0.7f, 0.8f, 0.16f);
-
-            leftArm = CreatePrimitivePart(root.transform, PrimitiveType.Capsule, new Vector3(-0.42f, 1.4f, 0f), new Vector3(0.18f, 0.75f, 0.18f), bodyMaterial, "Left Arm");
-            rightArm = CreatePrimitivePart(root.transform, PrimitiveType.Capsule, new Vector3(0.42f, 1.4f, 0f), new Vector3(0.18f, 0.75f, 0.18f), bodyMaterial, "Right Arm");
-            leftLeg = CreatePrimitivePart(root.transform, PrimitiveType.Capsule, new Vector3(-0.18f, 0.48f, 0f), new Vector3(0.2f, 0.84f, 0.2f), bodyMaterial, "Left Leg");
-            rightLeg = CreatePrimitivePart(root.transform, PrimitiveType.Capsule, new Vector3(0.18f, 0.48f, 0f), new Vector3(0.2f, 0.84f, 0.2f), bodyMaterial, "Right Leg");
-
-            var leftShort = CreatePrimitivePart(root.transform, PrimitiveType.Cube, new Vector3(-0.18f, 0.12f, 0f), new Vector3(0.28f, 0.24f, 0.18f), shortsMaterial, "Left Short");
-            var rightShort = CreatePrimitivePart(root.transform, PrimitiveType.Cube, new Vector3(0.18f, 0.12f, 0f), new Vector3(0.28f, 0.24f, 0.18f), shortsMaterial, "Right Short");
-            leftShort.localPosition = new Vector3(-0.18f, 0.07f, 0f);
-            rightShort.localPosition = new Vector3(0.18f, 0.07f, 0f);
-            CreatePrimitivePart(root.transform, PrimitiveType.Cube, new Vector3(-0.18f, 0.035f, 0.07f),
-                new Vector3(0.27f, 0.12f, 0.42f), shoeMaterial, "Left Trainer");
-            CreatePrimitivePart(root.transform, PrimitiveType.Cube, new Vector3(0.18f, 0.035f, 0.07f),
-                new Vector3(0.27f, 0.12f, 0.42f), shoeMaterial, "Right Trainer");
-        }
-
-        private static Transform FindChildByName(Transform parent, string name)
-        {
-            if (parent == null)
-                return null;
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform child = parent.GetChild(i);
-                if (child.name == name || child.name.Contains(name))
-                    return child;
-                Transform nested = FindChildByName(child, name);
-                if (nested != null)
-                    return nested;
-            }
-            return null;
-        }
-
-        private static Transform CreatePrimitivePart(Transform parent, PrimitiveType type, Vector3 localPosition, Vector3 scale, Material material, string name)
-        {
-            GameObject part = GameObject.CreatePrimitive(type);
-            part.name = name;
-            part.transform.SetParent(parent, false);
-            part.transform.localPosition = localPosition;
-            part.transform.localScale = scale;
-            Renderer renderer = part.GetComponent<Renderer>();
-            if (renderer != null)
-                renderer.sharedMaterial = material;
-            if (part.GetComponent<Collider>() != null)
-                Destroy(part.GetComponent<Collider>());
-            return part.transform;
         }
     }
 }
